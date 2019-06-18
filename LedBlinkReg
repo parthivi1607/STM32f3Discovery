@@ -1,0 +1,40 @@
+/**
+  ******************************************************************************
+  * @file    main.c
+  * @author  Ac6
+  * @version V1.0
+  * @date    01-December-2013
+  * @brief   Default main function.
+  ******************************************************************************
+*/
+
+//GPIO code without library
+
+#include "stm32f30x.h"
+#include "stm32f3_discovery.h"
+
+int main(void)
+{
+	long i;
+
+	//LED output configuration
+	RCC->AHBENR |= 1<<21; //GPIO E clock enable
+	GPIOE->MODER |= 1<<16; //01 for o/p
+	//GPIOE->OTYPER is set to rest value = 0 = o/p push pull
+	GPIOE->PUPDR |= 1<<17; //10 for pull down
+	GPIOE->OSPEEDR |= (1<<16)|(1<<17); //11 for high speed
+
+	while(1)
+	{
+		/*
+		GPIOE->ODR |= (1<<8); //high
+		for(i=0; i<500000; i++);
+		GPIOE->ODR &=~(1<<8); //low
+		for(i=0; i<500000; i++);
+		*/
+		GPIOE->BSRR = (1<<8); //high
+	  for(i=0; i<500000; i++);
+		GPIOE->BRR = (1<<8); //low
+		for(i=0; i<500000; i++);
+	}
+}
