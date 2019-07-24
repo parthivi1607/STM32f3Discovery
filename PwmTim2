@@ -1,0 +1,71 @@
+/**
+  ******************************************************************************
+  * @file    main.c
+  * @author  Ac6
+  * @version V1.0
+  * @date    01-December-2013
+  * @brief   Default main function.
+  ******************************************************************************
+*/
+
+//PWM using TIMER2
+
+#include "stm32f30x.h"
+#include "stm32f3_discovery.h"
+
+void GpioInit()
+{
+	RCC->AHBENR = 1<<18; //GPIOB clock enable
+	RCC->APB1ENR = 1<<0; //TIMER2 clock enable
+	GPIOB->MODER = (1<<7); //10 for alternate function
+	//GPIOB->OTYPER is set to reset value = 0 = o/p push pull
+	GPIOB->PUPDR = (1<<7); //10 for pull down
+	GPIOB->AFR[0] = (1<<12); //AF1 for PB3
+}
+
+void TimerInit()
+{
+	//PB3 TIM2 ch2 : 7&6
+
+	//TIM2->CR1 CMS is set at 00 for edge-aligned mode
+	//TIM2-> DIR is set at 0 for up-counting mode
+	TIM2->CR1 |= 1<<7; //set ARPE
+	TIM2->ARR = 1024;
+	//TIM2->PSC no prescalar
+
+	//TIM2->CCER CC2E = 0 = OFF
+	//TIM2->CCMR1 CC2S = 00 = output mode
+	//for channel 2
+	TIM2->CCMR1 |= 1<<11; //preload enable
+	TIM2->CCMR1 |= (1<<13) | (1<<14);
+	//enabling CC2 as output
+	TIM2->CCER |= 1<<4;
+
+	//As the preload registers are transferred to the shadow registers
+	//only when an update event occurs, before starting the counter,
+	//you have to initialize all the registers by setting the UG bit in
+	//the TIMx_EGR register
+	TIM2->EGR = 1<<0;
+	TIM2->CR1 |= 1<<0; //counter enable CEN
+}
+
+int main(void)
+{
+	long i=0;
+
+	GpioInit();
+	TimerInit();
+
+	while(1)
+	{
+		/*
+		TIM2->CCR2 = 0;
+		for(i=0; i<500000; i++);
+		TIM2->CCR2 = 512;
+		for(i=0; i<500000; i++);
+		TIM2->CCR2 = 1023;
+		for(i=0; i<500000; i++);
+		*/
+		TIM2->CCR2 = 1024;
+	}
+}
