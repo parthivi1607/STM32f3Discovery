@@ -1,0 +1,88 @@
+/**
+  ******************************************************************************
+  * @file    main.c
+  * @author  Ac6
+  * @version V1.0
+  * @date    01-December-2013
+  * @brief   Default main function.
+  ******************************************************************************
+*/
+
+//UART receive
+
+#include "stm32f30x.h"
+#include "stm32f3_discovery.h"
+
+char data;
+
+void ledblink()
+{
+	//LED output configuration
+	RCC->AHBENR |= 1<<21; //GPIO E clock enable
+	GPIOE->MODER |= 1<<16; //01 for o/p
+	//GPIOE->OTYPER is set to reset value = 0 = o/p push pull
+	GPIOE->PUPDR |= 1<<17; //10 for pull down
+	GPIOE->OSPEEDR |= (1<<16)|(1<<17); //11 for high speed
+}
+
+void UartReceive()
+{
+	//PC11 UART4_RX : 23&22
+
+	//GPIO initialization
+
+	RCC->AHBENR |= 1<<19; //GPIOC clock enable
+	RCC->APB1ENR = 1<<19; //UART4 clock enable
+	RCC->CFGR3 = 1<<20; //UART4 at system clock
+
+	GPIOC->MODER = (1<<23); //10 for alternate function
+	//GPIOC->OTYPER is set to reset value = 0 = o/p push pull
+	GPIOC->OSPEEDR = (1<<23) | (1<<22); //11 for high speed
+	GPIOC->PUPDR = (1<<23); //10 for pull down
+	GPIOC->AFR[1] = (1<<14) | (1<<12); //AF5 for PC11
+
+	//Receiver code
+
+	//UART4->CR1 UE = 0 = UART disabled
+	//UART4->CR1 M[1:0] = 00 = 1 start bit, 8 data bits
+	//UART4->CR1 PCE = 0 = parity control disabled
+	//UART4->CR1 OVER8 = 0 = over sampling by 16
+
+	//UART4->CR2 ABREN = 0 = auto baud rate detection disabled
+	//UART4->CR2 STOP[1:0] = 00 = 1 stop bit
+	//UART4->CR2 CLKEN = 0 = clock pin disabled
+	//UART4->CR2 = 1<<19; //MSB is sent first
+
+	UART4->BRR = 0x1D4C; //Baud rate = 9600
+
+	UART4->CR1 = 1<<0; //UART enabled
+	//UART4->CR1 TE = 0 = transmitter disabled
+	UART4->CR1 |= 1<<2; //Receiver enabled
+	//UART4->CR1 = (1<<0) | (1<<2);
+}
+
+void getvalue()
+{
+	while(!(UART4->ISR & (1<<5)));
+	data = UART4->RDR;
+}
+
+int main(void)
+{
+	long i;
+	ledblink();
+	UartReceive();
+
+	while(1)
+	{
+		getvalue();
+		if(data == 'K')
+		{
+			GPIOE->BSRR = (1<<8);
+		}
+		else
+		{
+			GPIOE->BRR = (1<<8); //low
+		}
+	}
+}
