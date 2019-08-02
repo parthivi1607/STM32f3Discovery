@@ -1,0 +1,304 @@
+/**
+  ******************************************************************************
+  * @file    main.c
+  * @author  Ac6
+  * @version V1.0
+  * @date    01-December-2013
+  * @brief   Default main function.
+  ******************************************************************************
+*/
+
+#include "stm32f30x.h"
+#include "stm32f3_discovery.h"
+#include <stdlib.h>
+
+int q;
+uint8_t data;
+uint8_t g, x1, x2, x3, y1, y2, y3;
+uint16_t pwmx, pwmy;
+int x,y;
+
+void ledconfigdir()
+{
+	//LED output configuration
+	RCC->AHBENR = 1<<21; //GPIO E clock enable
+
+	//PE8 - 17 & 16 blue
+	GPIOE->MODER = 1<<16; //01 for o/p
+	//GPIOE->OTYPER is set to reset value = 0 = o/p push pull
+	GPIOE->PUPDR = 1<<17; //10 for pull down
+	GPIOE->OSPEEDR = (1<<16)|(1<<17); //11 for high speed
+
+	//PE12 - 25 & 24 blue
+	GPIOE->MODER |= 1<<24; //01 for o/p
+	//GPIOE->OTYPER is set to reset value = 0 = o/p push pull
+	GPIOE->PUPDR |= 1<<25; //10 for pull down
+	GPIOE->OSPEEDR |= (1<<24)|(1<<25); //11 for high speed
+}
+
+void TimerInit()
+{
+	    //PE9 TIM1 ch1 : 19&18
+		//PE11 TIM1 ch2 : 23&22
+
+	    RCC->APB2ENR = 1<<11; //TIMER1 clock enable
+		GPIOE->MODER |= (1<<19) | (1<<23); //10 for alternate function
+		//GPIOE->OTYPER is set to reset value = 0 = o/p push pull
+		GPIOE->PUPDR |= (1<<19) | (1<<23); //10 for pull down
+		GPIOE->AFR[1] = (1<<5); //AF2 for PE9
+		GPIOE->AFR[1] |= (1<<13); //AF2 for PE11
+
+		//TIM1->CR1 DIR bit is at reset value = 0 for up-counting mode
+		//TIM1->CR1 CMS bit is at 00 for edge-aligned mode
+		TIM1->CR1 |= 1<<7; //set ARPE
+		TIM1->ARR = 15999; //14bits
+		//TIM1->PSC : no prescaler
+		//TIM1->BDTR LOCK[1:0] = 00 = lock off, no bit is write protected
+
+		//TIM1->CCER CC1E & CC2E = 0 = OFF
+		//TIM1->CCMR1 CC1S = 00 for output compare OC mode
+		//TIM1->CCMR1 CC2S = 00 for output compare OC mode
+		//for channel 1
+		TIM1->CCMR1 |= (1<<3); //preload enable
+		TIM1->CCMR1 |= (1<<5) | (1<<6); //PWM mode 1
+		//for channel 2
+		TIM1->CCMR1 |= (1<<11); //preload enable
+		TIM1->CCMR1 |= (1<<13) | (1<<14); //PWM mode 1
+		//TIM1->CCER CC1P & CC2P = 0 = active high
+		//enabling CC1 & CC2 channels as output
+		TIM1->CCER |= (1<<0) | (1<<4); //CC1 & CC2 output enable
+		TIM1->BDTR = 1<<15; //MOE: Main Output Enable is set
+		//MOE=1, OSSI=X, OSSR=0: When inactive, OC/OCN outputs are disabled
+
+		//As the preload registers are transferred to the shadow registers
+		//only when an update event occurs, before starting the counter,
+		//you have to initialize all the registers by setting the UG bit in
+		//the TIMx_EGR register
+		TIM1->EGR = 1<<0;
+		TIM1->CR1 |= 1<<0; //counter enable CEN
+}
+
+void UartReceive()
+{
+	//PC11 UART4_RX : 23&22
+
+	//GPIO initialization
+
+	RCC->AHBENR |= 1<<19; //GPIOC clock enable
+	RCC->APB1ENR = 1<<19; //UART4 clock enable
+	RCC->CFGR3 = 1<<20; //UART4 at system clock
+
+	GPIOC->MODER = (1<<23); //10 for alternate function
+	//GPIOC->OTYPER is set to reset value = 0 = o/p push pull
+	GPIOC->OSPEEDR = (1<<23) | (1<<22); //11 for high speed
+	GPIOC->PUPDR = (1<<23); //10 for pull down
+	GPIOC->AFR[1] = (1<<14) | (1<<12); //AF5 for PC11
+
+	//Receiver code
+
+	//UART4->CR1 UE = 0 = UART disabled
+	//UART4->CR1 M[1:0] = 00 = 1 start bit, 8 data bits
+	//UART4->CR1 PCE = 0 = parity control disabled
+	//UART4->CR1 OVER8 = 0 = over sampling by 16
+	UART4->CR1 = 1<<5; //interrupt for RXNE
+
+	//UART4->CR2 ABREN = 0 = auto baud rate detection disabled
+	//UART4->CR2 STOP[1:0] = 00 = 1 stop bit
+	//UART4->CR2 CLKEN = 0 = clock pin disabled
+	//UART4->CR2 = 1<<19; //MSB is sent first
+	/*
+	//Receiver timeout
+	UART4->CR2 |= 1<<23; //receiver timeout enable
+	UART4->CR1 |= 1<<26; //interrupt for receiver timeout
+	UART4->RTOR = 0x00000FFF;
+	//UART4->CR1 |= 1<<27; //end of block interrupt enable
+	*/
+	UART4->CR3 = 1<<12;
+
+	UART4->BRR = 0x4E2; //Baud rate = 57.6Kbps
+
+	UART4->CR1 |= 1<<0; //UART enabled
+	//UART4->CR1 TE = 0 = transmitter disabled
+	UART4->CR1 |= 1<<2; //Receiver enabled
+	//UART4->CR1 = (1<<0) | (1<<2);
+}
+
+void getvalue()
+{
+	while(!(UART4->ISR & (1<<5)));
+	data = UART4->RDR;
+}
+
+int octant(int p, int q)
+{
+	int c=0;
+	if(p==0 && q==0) c=0;
+	else if(p>=0 && q<=0)
+	{
+		if(p+q>0) c=1;
+		else c=2;
+	}
+	else if(p<=0 && q<=0)
+	{
+		if(p-q>0) c=3;
+		else c=4;
+	}
+	else if(p<=0 && q>0)
+	{
+		if(p+q>0) c=6;
+		else c=5;
+	}
+	else if(p>=0 && q>0)
+	{
+		if(p-q>0) c=8;
+		else c=7;
+	}
+	return c;
+}
+
+void direction(int z)
+{
+	if(z==5) z=8;
+	else if(z==8) z=5;
+
+	if(z==0)
+	{
+		GPIOE->ODR &=~(1<<8); //low
+		GPIOE->ODR &=~(1<<12); //low
+	}
+	else if(z==1 || z==5)
+	{
+		GPIOE->ODR |= (1<<8); //high
+		GPIOE->ODR &=~(1<<12); //high
+	}
+	else if(z==2 || z==3)
+	{
+		GPIOE->ODR |= (1<<8); //high
+		GPIOE->ODR |= (1<<12); //high
+	}
+	else if(z==4 || z==8)
+	{
+		GPIOE->ODR &=~(1<<8); //low
+		GPIOE->ODR |= (1<<12); //high
+	}
+	else if(z==6 || z==7)
+	{
+		GPIOE->ODR &=~(1<<8); //low
+		GPIOE->ODR &=~(1<<12); //low
+	}
+}
+
+void value(uint8_t val)
+{
+	if((val&0b11100000)==0b00000000)
+	{
+		g = val&0b00001111;
+	}
+	else if((val&0b11100000)==0b00100000)
+	{
+		x1 = val&0b00001111;
+	}
+	else if((val&0b11100000)==0b01000000)
+	{
+		x2 = val&0b00011111;
+	}
+	else if((val&0b11100000)==0b01100000)
+	{
+		x3 = val&0b00011111;
+	}
+	else if((val&0b11100000)==0b10000000)
+	{
+		y1 = val&0b00001111;
+	}
+	else if((val&0b11100000)==0b10100000)
+	{
+		y2 = val&0b00011111;
+	}
+	else if((val&0b11100000)==0b11000000)
+	{
+		y3 = val&0b00011111;
+	}
+	x = x1;
+	x = (x<<5)|x2;
+	x = (x<<5)|x3;
+	y = y1;
+	y = (y<<5)|y2;
+	y = (y<<5)|y3;
+}
+
+void gear()
+{
+	            if(g==0b00000001)
+				{
+					pwmx = pwmx*0.25;
+					pwmy = pwmy*0.25;
+				}
+				else if(g==0b00000010)
+				{
+					pwmx = pwmx*0.50;
+					pwmy = pwmy*0.50;
+				}
+				else if(g==0b00000011)
+				{
+					pwmx = pwmx*0.75;
+					pwmy = pwmy*0.75;
+				}
+				else
+				{
+					pwmx = pwmx*1;
+					pwmy = pwmy*1;
+				}
+}
+
+int main(void)
+{
+	ledconfigdir();
+	TimerInit();
+	UartReceive();
+	NVIC_EnableIRQ(UART4_IRQn);
+
+	while(1)
+	{
+		//getvalue();
+		value(data);
+
+
+		x = x-8000;
+		y = 8000-y;
+
+		if(abs(x)<100) x=0;
+		if(abs(y)<100) y=0;
+
+		q = octant(x,y);
+		direction(q);
+
+		x = x*2;
+		y = y*2;
+
+		pwmx = abs(x+y);
+		pwmy = abs(x-y);
+
+		if(pwmx>15900) pwmx=15999;
+		if(pwmy>15900) pwmy=15999;
+
+		gear();
+
+		TIM1->CCR1 = pwmy;
+		TIM1->CCR2 = pwmx;
+	}
+}
+
+void UART4_IRQHandler(void)
+{
+	if((UART4->ISR & (1<<5)))
+	{
+		data = UART4->RDR;
+	}
+	/*
+	if((UART4->ISR & (1<<11)))
+	{
+		//restart communication?
+		UART4->ICR |= 1<<11; //receiver timeout clear flag
+	}
+	*/
+}
