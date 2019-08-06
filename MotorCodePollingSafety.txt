@@ -310,7 +310,6 @@ int main(void)
 			yi=0;
 		}
 		*/
-		//value(data);
 		x = x-8000;
 		y = 8000-y;
 
