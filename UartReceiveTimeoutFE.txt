@@ -1,0 +1,135 @@
+/**
+  ******************************************************************************
+  * @file    main.c
+  * @author  Ac6
+  * @version V1.0
+  * @date    01-December-2013
+  * @brief   Default main function.
+  ******************************************************************************
+*/
+
+#include "stm32f30x.h"
+#include "stm32f3_discovery.h"
+
+char data;
+int flag=0;
+
+void ledblink()
+{
+	//LED output configuration
+	RCC->AHBENR = 1<<21; //GPIO E clock enable
+	//PE8 - 17 & 16
+	GPIOE->MODER = 1<<16; //01 for o/p
+	//GPIOE->OTYPER is set to reset value = 0 = o/p push pull
+	GPIOE->PUPDR = 1<<17; //10 for pull down
+	GPIOE->OSPEEDR = (1<<16)|(1<<17); //11 for high speed
+	//PE9 - 19 & 18
+	GPIOE->MODER |= 1<<18; //01 for o/p
+	//GPIOE->OTYPER is set to reset value = 0 = o/p push pull
+	GPIOE->PUPDR |= 1<<19; //10 for pull down
+	GPIOE->OSPEEDR |= (1<<18)|(1<<19); //11 for high speed
+}
+
+void UartReceive()
+{
+	//PC11 UART4_RX : 23&22
+
+	//GPIO initialization
+
+	RCC->AHBENR |= 1<<19; //GPIOC clock enable
+	RCC->APB1ENR = 1<<19; //UART4 clock enable
+	RCC->CFGR3 = 1<<20; //UART4 at system clock
+
+	GPIOC->MODER = (1<<23); //10 for alternate function
+	//GPIOC->OTYPER is set to reset value = 0 = o/p push pull
+	GPIOC->OSPEEDR = (1<<23) | (1<<22); //11 for high speed
+	GPIOC->PUPDR = (1<<23); //10 for pull down
+	GPIOC->AFR[1] = (1<<14) | (1<<12); //AF5 for PC11
+
+	//Receiver code
+
+	//UART4->CR1 UE = 0 = UART disabled
+	//UART4->CR1 M[1:0] = 00 = 1 start bit, 8 data bits
+	//UART4->CR1 PCE = 0 = parity control disabled
+	//UART4->CR1 OVER8 = 0 = over sampling by 16
+	UART4->CR1 |= 1<<5; //interrupt for RXNE
+
+	//UART4->CR2 ABREN = 0 = auto baud rate detection disabled
+	//UART4->CR2 STOP[1:0] = 00 = 1 stop bit
+	//UART4->CR2 CLKEN = 0 = clock pin disabled
+	//UART4->CR2 = 1<<19; //MSB is sent first
+
+	//Receiver timeout
+	UART4->CR2 |= 1<<23; //receiver timeout enable
+	UART4->CR1 |= 1<<26; //interrupt for receiver timeout
+	UART4->RTOR = 0x00000FFF;
+	//UART4->CR1 |= 1<<27; //end of block interrupt enable
+
+	//Error detection
+	UART4->CR3 = 1<<0; //error interrupt enable
+
+	UART4->CR3 |= 1<<12; //overrun disable
+
+	UART4->BRR = 0x1D4C; //Baud rate = 9600
+
+	UART4->CR1 |= 1<<0; //UART enabled
+	//UART4->CR1 TE = 0 = transmitter disabled
+	UART4->CR1 |= 1<<2; //Receiver enabled
+	//UART4->CR1 = (1<<0) | (1<<2);
+}
+
+int main(void)
+{
+	ledblink();
+	UartReceive();
+	NVIC_EnableIRQ(UART4_IRQn);
+
+	while(1)
+	{
+
+	}
+}
+
+void UART4_IRQHandler(void)
+{
+	//has a value been received?
+	if((UART4->ISR & (1<<5)))
+	{
+		GPIOE->ODR |= (1<<8);
+		data = UART4->RDR;
+		UART4->ICR |= 1<<11; //receiver timeout clear flag
+		if(data == '4')
+		{
+			GPIOE->ODR |= (1<<9);
+		    data=0;
+		}
+		else
+		{
+			GPIOE->ODR &= ~(1<<9);
+		}
+	}
+	else
+	{
+		GPIOE->ODR &= ~(1<<8);
+	}
+	/*
+	//receiver timeout
+	if((UART4->ISR & (1<<11)))
+	{
+		UART4->ICR |= 1<<11; //receiver timeout clear flag
+		GPIOE->ODR &= ~(1<<8); //low
+		GPIOE->ODR &= ~(1<<9); //low
+	}
+
+	//framing error
+	if(UART4->ISR &(1<<1))
+	{
+		GPIOE->ODR |= (1<<8);
+		GPIOE->ODR &= ~(1<<9);
+		UART4->ICR |= 1<<1;
+	}
+	else
+	{
+		//GPIOE->ODR &= ~(1<<8);
+	}*/
+}
