@@ -113,7 +113,7 @@ void UartReceive()
 	UART4->RTOR = 0x00000FFF;
 	//UART4->CR1 |= 1<<27; //end of block interrupt enable
 	*/
-	UART4->CR3 = 1<<12;
+	UART4->CR3 = 1<<12; //overrun disable
 
 	UART4->BRR = 0x4E2; //Baud rate = 57.6Kbps
 
