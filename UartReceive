@@ -78,7 +78,7 @@ int main(void)
 		getvalue();
 		if(data == 'K')
 		{
-			GPIOE->BSRR = (1<<8);
+			GPIOE->BSRR = (1<<8); //high
 		}
 		else
 		{
